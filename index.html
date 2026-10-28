@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Калькулятор">
+<meta name="theme-color" content="#000000">
+<style>body{margin:0}.app{padding-top:calc(10px + env(safe-area-inset-top,0px))!important;padding-bottom:calc(22px + env(safe-area-inset-bottom,0px))!important}</style>
+<title>Калькулятор Плюс</title>
+<style>
+/* Layout: one phone-sized column — display grows from the top, keypad pinned to the bottom; sheets slide up over it */
+:root{
+  --bg:#000; --fg:#fff; --muted:#8e8e93;
+  --key-num:#333333; --key-num-hi:#737373;
+  --key-fn:#a5a5a5; --key-fn-fg:#000; --key-fn-hi:#d9d9d9;
+  --op:#ff9f0a;
+  --sheet:#1c1c1e; --sheet-2:#2c2c2e; --line:#3a3a3c; --ok:#30d158;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue","Segoe UI",Roboto,Arial,sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0;overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;box-sizing:border-box}
+*,*::before,*::after{box-sizing:inherit}
+.app{height:100%;width:100%;max-width:min(400px,56dvh);min-width:0;margin:0 auto;display:flex;flex-direction:column;padding-block:10px 22px}
+
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.top .right{display:flex;gap:4px}
+.icon-btn{width:42px;height:42px;border-radius:50%;border:0;background:transparent;color:var(--op);display:grid;place-items:center;cursor:pointer;padding:0;transition:background .2s}
+.icon-btn:hover{background:var(--sheet-2)}
+.icon-btn svg{width:24px;height:24px}
+/* еле заметная точка: число спрятано и ждёт «+» */
+.arm{width:5px;height:5px;border-radius:50%;background:transparent}
+.arm.on{background:var(--sheet-2)}
+
+.display{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-end;align-items:stretch;padding:0 6px 14px;cursor:pointer;touch-action:pan-y}
+.expr,.preview,.main{text-align:right;white-space:nowrap;overflow:hidden;font-variant-numeric:tabular-nums}
+.expr{color:var(--muted);font-size:24px;min-height:30px;text-overflow:ellipsis;direction:rtl}
+.expr span{direction:ltr;unicode-bidi:isolate}
+.preview{color:var(--op);font-size:20px;min-height:26px;opacity:.9}
+.main{font-size:88px;font-weight:300;line-height:1.05;letter-spacing:-.02em;transition:transform .12s}
+.main.bump{transform:translateX(-6px)}
+
+.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(10px,3.6vw,16px)}
+.k{aspect-ratio:1;min-width:0;border-radius:50%;border:0;font-family:inherit;font-size:clamp(26px,8.6vw,38px);font-weight:400;color:var(--fg);background:var(--key-num);cursor:pointer;display:grid;place-items:center;padding:0;transition:background .3s ease,color .3s ease}
+.k:active,.k.press{background:var(--key-num-hi);transition:none}
+.k.fn{background:var(--key-fn);color:var(--key-fn-fg);font-size:clamp(22px,7.2vw,32px);font-weight:500}
+.k.fn:active,.k.fn.press{background:var(--key-fn-hi)}
+.k.op{background:var(--op);font-size:clamp(30px,10vw,44px)}
+.k.op:active,.k.op.press{filter:brightness(1.3)}
+.k.op.active{background:var(--fg);color:var(--op)}
+.k.zero{grid-column:span 2;aspect-ratio:auto;border-radius:999px;justify-items:start;padding-left:clamp(26px,8.5vw,34px)}
+.k svg{width:.85em;height:.85em}
+.k:focus-visible,.icon-btn:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+
+/* sheets */
+.backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;z-index:20;opacity:0;transition:opacity .25s}
+.backdrop.open{opacity:1}
+.sheet{width:100%;max-width:440px;max-height:82%;background:var(--sheet);border-radius:18px 18px 0 0;padding:10px max(18px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(18px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:14px;transform:translateY(100%);transition:transform .3s cubic-bezier(.2,.8,.2,1);-webkit-user-select:text;user-select:text}
+.backdrop.open .sheet{transform:none}
+.grab{width:38px;height:5px;border-radius:3px;background:var(--line);margin:0 auto}
+.sheet-head{display:flex;justify-content:space-between;align-items:center}
+.sheet-head h2{margin:0;font-size:19px;font-weight:600}
+.link{background:none;border:0;color:var(--op);font:inherit;font-size:16px;cursor:pointer;padding:6px 2px}
+.link.danger{color:#ff453a}
+.scroll{overflow:auto;min-height:0;margin:0 -4px;padding:0 4px}
+
+.hist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.hist li{padding:12px 4px;border-bottom:1px solid var(--line);cursor:pointer;text-align:right;border-radius:8px}
+.hist li:hover{background:var(--sheet-2)}
+.hist .e{color:var(--muted);font-size:15px;word-break:break-all}
+.hist .r{font-size:26px;font-weight:300;font-variant-numeric:tabular-nums}
+.hist .t{float:left;color:var(--muted);font-size:12px;margin-top:4px}
+.empty{color:var(--muted);text-align:center;padding:30px 10px;font-size:15px;line-height:1.5}
+
+.group{background:var(--sheet-2);border-radius:12px;padding:4px 14px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 0;font-size:16px}
+.row+.row{border-top:1px solid var(--line)}
+.row .lbl{color:var(--muted)}
+.row .val{font-variant-numeric:tabular-nums;font-size:17px}
+.row .val.big{font-size:28px;font-weight:300;color:var(--op)}
+.cap{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 -6px 4px}
+
+.swatches{display:flex;gap:12px;flex-wrap:wrap;padding:12px 0}
+.sw{width:40px;height:40px;border-radius:50%;border:3px solid transparent;cursor:pointer;padding:0;box-shadow:inset 0 0 0 2px var(--sheet-2)}
+.sw[aria-pressed="true"]{border-color:var(--fg)}
+
+.switch{appearance:none;-webkit-appearance:none;width:51px;height:31px;border-radius:16px;background:var(--line);position:relative;cursor:pointer;transition:background .2s;flex:none;margin:0}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:27px;height:27px;border-radius:50%;background:#fff;transition:transform .2s}
+.switch:checked{background:var(--ok)}
+.switch:checked::after{transform:translateX(20px)}
+
+.amount{width:9em;min-width:0;background:transparent;border:0;color:var(--fg);font:inherit;font-size:22px;text-align:right;font-variant-numeric:tabular-nums}
+.chips{display:flex;gap:8px;flex-wrap:wrap;padding:12px 0}
+.chip{flex:1;min-width:52px;border:0;border-radius:10px;padding:9px 0;background:var(--sheet);color:var(--fg);font:inherit;font-size:15px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--op);color:#000;font-weight:600}
+.stepper{display:flex;align-items:center;gap:14px}
+.stepper button{width:34px;height:34px;border-radius:50%;border:0;background:var(--sheet);color:var(--op);font-size:22px;cursor:pointer;line-height:1}
+.stepper output{min-width:2ch;text-align:center;font-size:18px;font-variant-numeric:tabular-nums}
+.primary{border:0;border-radius:14px;background:var(--op);color:#000;font:inherit;font-weight:600;font-size:17px;padding:14px;cursor:pointer}
+
+.toast{position:fixed;left:50%;top:calc(18px + env(safe-area-inset-top,0px));transform:translate(-50%,-8px);background:var(--sheet-2);color:var(--fg);padding:9px 16px;border-radius:20px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:30}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <div class="top">
+    <button class="icon-btn" id="btnHistory" aria-label="История">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1" fill="currentColor"/><circle cx="3.5" cy="12" r="1" fill="currentColor"/><circle cx="3.5" cy="18" r="1" fill="currentColor"/></svg>
+    </button>
+    <span class="arm" id="armDot" aria-hidden="true"></span>
+    <div class="right">
+      <button class="icon-btn" id="btnTip" aria-label="Чаевые и счёт">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h14v18l-2.5-1.6L14 21l-2-1.6L10 21l-2.5-1.6L5 21z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+      </button>
+      <button class="icon-btn" id="btnSettings" aria-label="Настройки">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="display" id="display" title="Нажмите — скопировать, смахните — стереть цифру">
+    <div class="expr" id="expr"><span></span></div>
+    <div class="preview" id="preview"></div>
+    <div class="main" id="main">0</div>
+  </div>
+
+  <div class="keys" id="keys">
+    <button class="k fn" data-k="clear" id="kClear">AC</button>
+    <button class="k fn" data-k="sign" aria-label="Плюс-минус">+/−</button>
+    <button class="k fn" data-k="pct">%</button>
+    <button class="k op" data-k="÷" aria-label="Разделить">÷</button>
+    <button class="k" data-k="7">7</button>
+    <button class="k" data-k="8">8</button>
+    <button class="k" data-k="9">9</button>
+    <button class="k op" data-k="×" aria-label="Умножить">×</button>
+    <button class="k" data-k="4">4</button>
+    <button class="k" data-k="5">5</button>
+    <button class="k" data-k="6">6</button>
+    <button class="k op" data-k="−" aria-label="Минус">−</button>
+    <button class="k" data-k="1">1</button>
+    <button class="k" data-k="2">2</button>
+    <button class="k" data-k="3">3</button>
+    <button class="k op" data-k="+" aria-label="Плюс">+</button>
+    <button class="k zero" data-k="0">0</button>
+    <button class="k" data-k="dot" aria-label="Запятая">,</button>
+    <button class="k op" data-k="eq" aria-label="Равно">=</button>
+  </div>
+</div>
+
+<!-- History -->
+<div class="backdrop" id="sheetHistory" hidden>
+  <div class="sheet" role="dialog" aria-label="История">
+    <div class="grab"></div>
+    <div class="sheet-head">
+      <button class="link danger" id="clearHistory">Очистить</button>
+      <h2>История</h2>
+      <button class="link" data-close>Готово</button>
+    </div>
+    <div class="scroll"><ul class="hist" id="histList"></ul></div>
+  </div>
+</div>
+
+<!-- Tip & split -->
+<div class="backdrop" id="sheetTip" hidden>
+  <div class="sheet" role="dialog" aria-label="Чаевые и счёт">
+    <div class="grab"></div>
+    <div class="sheet-head"><span style="width:60px"></span><h2>Чаевые и счёт</h2><button class="link" data-close>Готово</button></div>
+    <div class="scroll" style="display:flex;flex-direction:column;gap:14px">
+      <div class="group">
+        <div class="row"><span class="lbl">Сумма счёта</span><input class="amount" id="tipAmount" inputmode="decimal" value="0"></div>
+      </div>
+      <p class="cap">Чаевые</p>
+      <div class="group"><div class="chips" id="tipChips"></div></div>
+      <div class="group">
+        <div class="row"><span class="lbl">Сколько человек</span>
+          <div class="stepper"><button id="pplMinus" aria-label="Меньше">−</button><output id="ppl">1</output><button id="pplPlus" aria-label="Больше">+</button></div>
+        </div>
+      </div>
+      <div class="group">
+        <div class="row"><span class="lbl">Чаевые</span><span class="val" id="tipSum">0</span></div>
+        <div class="row"><span class="lbl">Итого</span><span class="val" id="tipTotal">0</span></div>
+        <div class="row"><span class="lbl">С каждого</span><span class="val big" id="tipEach">0</span></div>
+      </div>
+      <button class="primary" id="tipInsert">Перенести «с каждого» в калькулятор</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="backdrop" id="sheetSettings" hidden>
+  <div class="sheet" role="dialog" aria-label="Настройки">
+    <div class="grab"></div>
+    <div class="sheet-head"><span style="width:60px"></span><h2>Настройки</h2><button class="link" data-close>Готово</button></div>
+    <div class="scroll" style="display:flex;flex-direction:column;gap:14px">
+      <p class="cap">Цвет операций</p>
+      <div class="group"><div class="swatches" id="swatches"></div></div>
+      <p class="cap">Отклик</p>
+      <div class="group">
+        <div class="row"><label for="optSound">Звук нажатий</label><input type="checkbox" class="switch" id="optSound"></div>
+        <div class="row"><label for="optHaptic">Вибрация</label><input type="checkbox" class="switch" id="optHaptic"></div>
+        <div class="row"><label for="optPreview">Подсказка результата</label><input type="checkbox" class="switch" id="optPreview"></div>
+      </div>
+      <p class="cap">Подсказки</p>
+      <div class="group">
+        <div class="row"><span class="lbl">Стереть цифру</span><span>смахнуть по экрану</span></div>
+        <div class="row"><span class="lbl">Скопировать</span><span>нажать на число</span></div>
+        <div class="row"><span class="lbl">Клавиатура</span><span>0–9 , + − * / Enter Esc</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const OPS = ["+", "−", "×", "÷"];
+  const isOp = t => OPS.includes(t);
+  const ACCENTS = [
+    ["Классика", "#ff9f0a"], ["Мята", "#2fd3a2"], ["Лаванда", "#a78bfa"],
+    ["Коралл", "#ff5e5b"], ["Небо", "#3ea6ff"], ["Лимон", "#e5d34a"]
+  ];
+  const TIPS = [0, 5, 10, 15, 20];
+
+  const S = {
+    tokens: [], cur: "", result: null, justEval: false, lastExpr: "",
+    lastOp: null, lastArg: null,
+    history: [], accent: ACCENTS[0][1], sound: false, haptic: true, preview: true,
+    tip: 10, ppl: 1, secret: null
+  };
+
+  // ---------- storage ----------
+  const load = () => { try { Object.assign(S, JSON.parse(localStorage.getItem("calcplus") || "{}")); } catch (e) {} };
+  const save = () => { try {
+    localStorage.setItem("calcplus", JSON.stringify({ history: S.history, accent: S.accent, sound: S.sound, haptic: S.haptic, preview: S.preview, tip: S.tip, secret: S.secret }));
+  } catch (e) {} };
+
+  // ---------- number formatting (ru: пробел между разрядами, запятая) ----------
+  const group = i => i.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  function fmtEntry(s) {
+    if (/e/i.test(s)) return fmtNum(parseFloat(s));
+    const neg = s.startsWith("-");
+    const body = neg ? s.slice(1) : s;
+    const [i, d] = body.split(".");
+    return (neg ? "−" : "") + group(i || "0") + (body.includes(".") ? "," + d : "");
+  }
+  function fmtNum(n) {
+    if (n === null || n === undefined) return "0";
+    if (!isFinite(n)) return "Ошибка";
+    if (n === 0) return "0";
+    const a = Math.abs(n);
+    if (a >= 1e9 || a < 1e-8) {
+      let [m, e] = n.toExponential(5).split("e");
+      m = m.includes(".") ? m.replace(/0+$/, "").replace(/\.$/, "") : m;
+      return m.replace(".", ",").replace("-", "−") + "e" + parseInt(e, 10);
+    }
+    const intDigits = Math.floor(a).toString().length;
+    let s = n.toFixed(Math.max(0, 9 - intDigits));
+    if (s.includes(".")) s = s.replace(/0+$/, "").replace(/\.$/, "");
+    if (parseFloat(s) === 0) return "0";
+    return fmtEntry(s);
+  }
+  const raw = v => String(parseFloat(v.toPrecision(12)));
+  const plain = txt => txt.replace(/ /g, "").replace("−", "-");
+
+  // ---------- math with operator precedence ----------
+  function evaluate(t) {
+    const out = [t[0]];
+    for (let i = 1; i < t.length; i += 2) {
+      const op = t[i], n = t[i + 1];
+      if (op === "×") out[out.length - 1] *= n;
+      else if (op === "÷") out[out.length - 1] /= n;
+      else out.push(op, n);
+    }
+    let r = out[0];
+    for (let i = 1; i < out.length; i += 2) r = out[i] === "+" ? r + out[i + 1] : r - out[i + 1];
+    return isFinite(r) ? parseFloat(r.toPrecision(12)) : NaN;
+  }
+  const exprText = t => t.map(x => isOp(x) ? ` ${x} ` : fmtNum(x)).join("");
+
+  // ---------- actions ----------
+  function resetAll() { S.tokens = []; S.cur = ""; S.result = null; S.justEval = false; S.lastExpr = ""; S.lastOp = null; S.lastArg = null; }
+  function digit(d) {
+    if (S.justEval) resetAll();
+    if (S.cur.replace(/[-.]/g, "").length >= 9) return bump();
+    if (S.cur === "0") S.cur = d;
+    else if (S.cur === "-0") S.cur = "-" + d;
+    else S.cur += d;
+  }
+  function dot() {
+    if (S.justEval) resetAll();
+    if (S.cur === "" || S.cur === "-") S.cur = (S.cur || "") + "0";
+    if (!S.cur.includes(".")) S.cur += ".";
+  }
+  function op(o) {
+    if (S.justEval) {
+      if (!isFinite(S.result)) return resetAll();
+      S.tokens = [S.result, o]; S.justEval = false; S.result = null; S.lastExpr = ""; return;
+    }
+    if (S.cur !== "") { S.tokens.push(parseFloat(S.cur)); S.cur = ""; S.tokens.push(o); }
+    else if (S.tokens.length && isOp(S.tokens[S.tokens.length - 1])) S.tokens[S.tokens.length - 1] = o;
+    else S.tokens = [0, o];
+  }
+  function equals() {
+    if (S.justEval) {
+      if (!S.lastOp || !isFinite(S.result)) return;
+      const t = [S.result, S.lastOp, S.lastArg];
+      return finish(t);
+    }
+    const t = [...S.tokens];
+    if (S.cur !== "") t.push(parseFloat(S.cur));
+    else if (t.length && isOp(t[t.length - 1])) t.push(t[t.length - 2]); // 5 + = → 10, как в iPhone
+    if (t.length < 3) return;
+    S.lastOp = t[t.length - 2]; S.lastArg = t[t.length - 1];
+    finish(t);
+  }
+  function finish(t) {
+    const r = evaluate(t);
+    S.lastExpr = exprText(t);
+    S.history.unshift({ e: S.lastExpr, r, at: Date.now() });
+    S.history = S.history.slice(0, 60);
+    save();
+    S.tokens = []; S.cur = ""; S.result = r; S.justEval = true;
+  }
+  function sign() {
+    if (S.cur !== "") S.cur = S.cur.startsWith("-") ? S.cur.slice(1) : "-" + S.cur;
+    else if (S.justEval && isFinite(S.result)) S.result = -S.result;
+    else S.cur = "-0";
+  }
+  function pct() {
+    if (S.cur !== "") {
+      let v = parseFloat(S.cur);
+      const last = S.tokens[S.tokens.length - 1];
+      // 200 + 10 % → 200 + 20, как в iPhone
+      if ((last === "+" || last === "−") && S.tokens.length >= 2) v = evaluate(S.tokens.slice(0, -1)) * v / 100;
+      else v = v / 100;
+      S.cur = raw(v);
+    } else if (S.justEval && isFinite(S.result)) S.result = parseFloat((S.result / 100).toPrecision(12));
+  }
+  function backspace() {
+    if (S.cur === "") return false;
+    S.cur = S.cur.slice(0, -1);
+    if (S.cur === "-" || S.cur === "-0") S.cur = "";
+    return true;
+  }
+  function clearKey() { if (S.cur !== "") backspace(); else resetAll(); }
+
+  // ---------- фокус: спрятанное число ----------
+  // Долгое нажатие на экран прячет набранное число. Первый «+» после этого
+  // считает разницу (спрятанное − то, что сейчас на экране), и дальше каждое
+  // касание экрана впечатывает по одной цифре этой разницы. «=» даёт спрятанное число.
+  let reveal = "", swallow = false;
+  function markArmed() { $("armDot").classList.toggle("on", S.secret !== null); }
+  function arm() {
+    const v = S.justEval ? "" : S.cur.replace("-", "");
+    S.secret = /^\d+$/.test(v) && parseInt(v, 10) > 0 ? parseInt(v, 10) : null;
+    reveal = "";
+    save(); resetAll(); render(); markArmed();
+    try { S.haptic && navigator.vibrate && navigator.vibrate([12, 60, 12]); } catch (e) {}
+  }
+  function startReveal() {
+    let x = S.secret - evaluate(S.tokens.slice(0, -1));
+    if (!isFinite(x)) return;
+    if (x < 0) { S.tokens[S.tokens.length - 1] = "−"; x = -x; }
+    reveal = raw(x);
+    S.secret = null; save(); markArmed();
+  }
+  function revealStep() {
+    const c = reveal[0]; reveal = reveal.slice(1);
+    feedback();
+    if (c === ".") dot(); else digit(c);
+    render();
+  }
+
+  function press(k) {
+    feedback();
+    if (/^\d$/.test(k)) digit(k);
+    else if (k === "dot") dot();
+    else if (isOp(k)) { op(k); if (k === "+" && S.secret !== null) startReveal(); }
+    else if (k === "eq") equals();
+    else if (k === "sign") sign();
+    else if (k === "pct") pct();
+    else if (k === "clear") clearKey();
+    else if (k === "back") { if (!backspace()) bump(); }
+    render();
+  }
+
+  // ---------- render ----------
+  const mainEl = $("main"), exprEl = $("expr").firstElementChild, prevEl = $("preview");
+  function mainText() {
+    if (S.cur !== "") return fmtEntry(S.cur);
+    if (S.justEval) return fmtNum(S.result);
+    const nums = S.tokens.filter(x => !isOp(x));
+    return nums.length ? fmtNum(nums[nums.length - 1]) : "0";
+  }
+  function render() {
+    mainEl.textContent = mainText();
+    exprEl.textContent = S.justEval ? S.lastExpr + " =" : exprText(S.tokens) + (S.cur !== "" ? fmtEntry(S.cur) : "");
+    let p = "";
+    if (S.preview && !S.justEval && S.cur !== "" && S.tokens.length >= 2) {
+      const r = evaluate([...S.tokens, parseFloat(S.cur)]);
+      p = "= " + fmtNum(r);
+    }
+    prevEl.textContent = p;
+    $("kClear").textContent = S.cur !== "" ? "" : "AC";
+    if (S.cur !== "") $("kClear").innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><path d="M21 5H9l-6 7 6 7h12z"/><path d="M17 9l-6 6M11 9l6 6"/></svg>';
+    $("kClear").setAttribute("aria-label", S.cur !== "" ? "Стереть" : "Сбросить всё");
+    const activeOp = S.cur === "" && !S.justEval && isOp(S.tokens[S.tokens.length - 1]) ? S.tokens[S.tokens.length - 1] : null;
+    document.querySelectorAll(".k.op").forEach(b => b.classList.toggle("active", b.dataset.k === activeOp));
+    fit();
+  }
+  function fit() {
+    let size = Math.min(96, $("app").clientWidth * 0.24);
+    mainEl.style.fontSize = size + "px";
+    while (mainEl.scrollWidth > mainEl.clientWidth && size > 26) { size -= 2; mainEl.style.fontSize = size + "px"; }
+  }
+  function bump() { mainEl.classList.add("bump"); setTimeout(() => mainEl.classList.remove("bump"), 120); }
+
+  // ---------- feedback ----------
+  let ac = null;
+  function feedback() {
+    if (S.haptic) { try { navigator.vibrate && navigator.vibrate(8); } catch (e) {} }
+    if (S.sound) {
+      try {
+        ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = "triangle"; o.frequency.value = 1500;
+        g.gain.setValueAtTime(0.08, ac.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + 0.04);
+        o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime + 0.05);
+      } catch (e) {}
+    }
+  }
+  let toastT;
+  function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 1400); }
+
+  // ---------- фокус: перехват касаний, пока впечатываются цифры ----------
+  document.addEventListener("pointerdown", e => {
+    if (!reveal || document.querySelector(".backdrop:not([hidden])")) { swallow = false; return; }
+    e.preventDefault(); e.stopPropagation();
+    swallow = true;
+    const b = e.target.closest(".k");
+    if (b) { b.classList.add("press"); setTimeout(() => b.classList.remove("press"), 90); }
+    revealStep();
+  }, true);
+  document.addEventListener("click", e => {
+    if (swallow) { swallow = false; e.preventDefault(); e.stopPropagation(); }
+  }, true);
+
+  // ---------- keypad + display gestures ----------
+  $("keys").addEventListener("click", e => { const b = e.target.closest(".k"); if (b) press(b.dataset.k); });
+  let sx = null, lpT = null, lpFired = false;
+  const disp = $("display");
+  const cancelLP = () => clearTimeout(lpT);
+  disp.addEventListener("pointerdown", e => {
+    sx = e.clientX; lpFired = false; cancelLP();
+    lpT = setTimeout(() => { lpFired = true; sx = null; arm(); }, 650);
+  });
+  disp.addEventListener("pointermove", e => { if (sx !== null && Math.abs(e.clientX - sx) > 12) cancelLP(); });
+  disp.addEventListener("pointercancel", () => { cancelLP(); sx = null; });
+  disp.addEventListener("contextmenu", e => e.preventDefault());
+  disp.addEventListener("pointerup", e => {
+    cancelLP();
+    if (lpFired || sx === null) return;
+    const dx = e.clientX - sx; sx = null;
+    if (Math.abs(dx) > 35) { press("back"); return; }
+    const txt = plain(mainEl.textContent);
+    if (txt === "Ошибка") return;
+    const done = () => toast("Скопировано: " + txt);
+    try { navigator.clipboard.writeText(txt).then(done, () => selectMain()); } catch (err) { selectMain(); }
+  });
+  function selectMain() { const r = document.createRange(); r.selectNodeContents(mainEl); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast("Выделено — скопируйте вручную"); }
+
+  const KEYMAP = { "+": "+", "-": "−", "*": "×", "x": "×", "/": "÷", ":": "÷", "Enter": "eq", "=": "eq", ".": "dot", ",": "dot", "%": "pct", "Backspace": "back", "Escape": "clear", "Delete": "clear" };
+  document.addEventListener("keydown", e => {
+    if (document.querySelector(".backdrop:not([hidden])")) { if (e.key === "Escape") closeSheets(); return; }
+    if (reveal && e.key.length === 1 || reveal && e.key === "Enter") { e.preventDefault(); revealStep(); return; }
+    let k = /^\d$/.test(e.key) ? e.key : KEYMAP[e.key];
+    if (!k) return;
+    e.preventDefault();
+    if (k === "clear") { feedback(); reveal = ""; resetAll(); render(); return; }
+    const btn = document.querySelector(`.k[data-k="${k}"]`);
+    if (btn) { btn.classList.add("press"); setTimeout(() => btn.classList.remove("press"), 90); }
+    press(k);
+  });
+
+  // ---------- sheets ----------
+  function openSheet(id) {
+    const el = $(id); el.hidden = false;
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("open")));
+  }
+  function closeSheets() {
+    document.querySelectorAll(".backdrop:not([hidden])").forEach(el => {
+      el.classList.remove("open"); setTimeout(() => { el.hidden = true; }, 260);
+    });
+  }
+  document.querySelectorAll(".backdrop").forEach(b => b.addEventListener("click", e => {
+    if (e.target === b || e.target.closest("[data-close]")) closeSheets();
+  }));
+
+  // history
+  function renderHistory() {
+    const ul = $("histList");
+    if (!S.history.length) { ul.innerHTML = '<li class="empty" style="cursor:default">Здесь появятся ваши вычисления.<br>Нажмите на запись, чтобы вернуть результат.</li>'; return; }
+    const tf = new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    ul.innerHTML = "";
+    S.history.forEach(h => {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="t"></span><div class="e"></div><div class="r"></div>`;
+      li.querySelector(".t").textContent = h.at ? tf.format(h.at) : "";
+      li.querySelector(".e").textContent = h.e + " =";
+      li.querySelector(".r").textContent = fmtNum(h.r);
+      li.addEventListener("click", () => {
+        if (!isFinite(h.r)) return;
+        if (S.justEval) resetAll();
+        S.cur = raw(h.r); render(); closeSheets();
+      });
+      ul.appendChild(li);
+    });
+  }
+  $("btnHistory").addEventListener("click", () => { renderHistory(); openSheet("sheetHistory"); });
+  $("clearHistory").addEventListener("click", () => {
+    const b = $("clearHistory");
+    if (!S.history.length) return;
+    if (b.dataset.confirm) { S.history = []; save(); renderHistory(); b.textContent = "Очистить"; delete b.dataset.confirm; }
+    else { b.dataset.confirm = "1"; b.textContent = "Точно?"; setTimeout(() => { b.textContent = "Очистить"; delete b.dataset.confirm; }, 2500); }
+  });
+
+  // tip & split
+  const money = n => isFinite(n) ? n.toLocaleString("ru-RU", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }) : "—";
+  function currentValue() {
+    if (S.cur !== "") return parseFloat(S.cur);
+    if (S.justEval && isFinite(S.result)) return S.result;
+    return 0;
+  }
+  function renderTip() {
+    $("tipChips").innerHTML = "";
+    TIPS.forEach(p => {
+      const c = document.createElement("button");
+      c.className = "chip"; c.textContent = p + "%"; c.setAttribute("aria-pressed", String(p === S.tip));
+      c.addEventListener("click", () => { S.tip = p; save(); renderTip(); });
+      $("tipChips").appendChild(c);
+    });
+    $("ppl").textContent = S.ppl;
+    const amt = parseFloat(String($("tipAmount").value).replace(/\s/g, "").replace(",", ".")) || 0;
+    const tip = amt * S.tip / 100, total = amt + tip;
+    $("tipSum").textContent = money(tip);
+    $("tipTotal").textContent = money(total);
+    $("tipEach").textContent = money(total / S.ppl);
+  }
+  $("btnTip").addEventListener("click", () => {
+    const v = Math.abs(currentValue());
+    $("tipAmount").value = String(v ? parseFloat(v.toPrecision(12)) : 2450).replace(".", ",");
+    renderTip(); openSheet("sheetTip");
+  });
+  $("tipAmount").addEventListener("input", renderTip);
+  $("pplMinus").addEventListener("click", () => { S.ppl = Math.max(1, S.ppl - 1); renderTip(); });
+  $("pplPlus").addEventListener("click", () => { S.ppl = Math.min(50, S.ppl + 1); renderTip(); });
+  $("tipInsert").addEventListener("click", () => {
+    const amt = parseFloat(String($("tipAmount").value).replace(/\s/g, "").replace(",", ".")) || 0;
+    const each = Math.round(amt * (1 + S.tip / 100) / S.ppl * 100) / 100;
+    resetAll(); S.cur = raw(each); render(); closeSheets(); toast("Перенесено: " + money(each));
+  });
+
+  // settings
+  function applyAccent() {
+    document.documentElement.style.setProperty("--op", S.accent);
+    $("swatches").innerHTML = "";
+    ACCENTS.forEach(([name, c]) => {
+      const b = document.createElement("button");
+      b.className = "sw"; b.style.background = c; b.setAttribute("aria-label", name); b.title = name;
+      b.setAttribute("aria-pressed", String(c === S.accent));
+      b.addEventListener("click", () => { S.accent = c; save(); applyAccent(); });
+      $("swatches").appendChild(b);
+    });
+  }
+  $("btnSettings").addEventListener("click", () => openSheet("sheetSettings"));
+  [["optSound", "sound"], ["optHaptic", "haptic"], ["optPreview", "preview"]].forEach(([id, key]) => {
+    $(id).addEventListener("change", e => { S[key] = e.target.checked; save(); render(); if (key === "sound" && S.sound) feedback(); });
+  });
+
+  // ---------- boot ----------
+  load();
+  $("optSound").checked = S.sound; $("optHaptic").checked = S.haptic; $("optPreview").checked = S.preview;
+  applyAccent();
+  markArmed();
+  render();
+  addEventListener("resize", fit);
+})();
+</script>
+</body>
+</html>
